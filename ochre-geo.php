@@ -184,6 +184,7 @@ class OCHRELABS_WP_Geolocation
   function admin_screen()
   {
     if($_SERVER['REQUEST_METHOD']=='POST' && check_admin_referer('ochregeo_admin_update')){
+
       update_option('ochregeo_opmode',$_POST['ochregeo_opmode']);
       update_option('ochregeo_globalactionjs',stripslashes_deep($_POST['ochregeo_globalactionjs']));
       if(isset($_POST['ochregeo_useypf']))
@@ -199,6 +200,7 @@ class OCHRELABS_WP_Geolocation
     $opmode = get_option('ochregeo_opmode');
     $globaljs = get_option('ochregeo_globalactionjs');
     $ypf = get_option('ochregeo_useypf');
+    $ypfappid = get_option('ochregeo_ypfappid');
 ?>
 <h1>Ochre's Geolocation Services plugin for Wordpress</h1>
 Version <?php echo $this::VERSION;?>
@@ -218,9 +220,9 @@ Version <?php echo $this::VERSION;?>
 <tr><td>Global action javascript:</td><td><textarea cols=80 rows=10 name="ochregeo_globalactionjs"><?php echo htmlentities($globaljs);?></textarea></td></tr>
 </table>
 <h2>Geocoder Settings</h2>
-Use of the Yahoo! Placefinder API for Geocoding requires agreement with the <a href="developer.yahoo.com/terms" target="_blank">Yahoo! Developer Terms of Service</a>.
+Use of the Yahoo! Placefinder API for Geocoding requires agreement with the <a href="http://developer.yahoo.com/terms" target="_blank">Yahoo! Developer Terms of Service</a>.
 <table>
-<tr><td>Use Yahoo! Placefinder for Geocoding:</td><td><input type="checkbox" name="ochregeo_useypf" value="Y" <?php if($ypf == "Y") echo "checked";?>"></td></tr>
+<tr><td>Use Yahoo! Placefinder for Geocoding:</td><td><input type="checkbox" name="ochregeo_useypf" value="Y" <?php if($ypf == "Y") echo "checked";?>></td></tr>
 <tr><td>Yahoo! AppID</td><td><input type="text" name="ochregeo_ypfappid" value="<?php echo $ypfappid;?>"></td></tr>
 </table>
 <input type="submit" value="Save settings"><input type="reset" value="Undo changes">
@@ -474,7 +476,7 @@ Like this plugin? <br/>Buy us a coffee or two!
   }
 }
 
-$ochre_geo = new OCHRELABS_WP_Geolocation(array("debug"=>true));
+$ochre_geo = new OCHRELABS_WP_Geolocation();
 
 add_action('admin_menu',array($ochre_geo,'init_admin_menu'));
 add_action('add_meta_boxes',array($ochre_geo,'add_meta_boxes'));
