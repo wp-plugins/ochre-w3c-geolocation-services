@@ -5,7 +5,7 @@ Plugin URI: http://www.ochrelabs.com/wordpress-plugins/ochre-geolocation
 Description: Geolocation Services for Wordpress
 Author: Ochre Development Labs
 Author URI: http://www.ochrelabs.com
-Version: 0.03
+Version: 0.04
 */
 
 class OCHRELABS_WP_Geolocation
@@ -24,7 +24,7 @@ class OCHRELABS_WP_Geolocation
   private $_ypfcachettl = 600;		// Cache placefinder results for up to 10 minutes.
   private $_tablepfx;
   
-  const VERSION = 0.03;  
+  const VERSION = 0.04;  
     
   const WP_EXTEND_URL = 'http://wordpress.org/extend/plugins/ochre-w3c-geolocation-services/';
   const PLUGIN_URL = 'http://www.ochrelabs.com/wordpress-plugins/ochre-geolocation'; 
@@ -54,7 +54,7 @@ class OCHRELABS_WP_Geolocation
       if(isset($params['debug']))
         $this->debug=TRUE;
     }
-    $this->_status = self::STATUS_QUERY;
+    $this->_status = OCHRELABS_WP_Geolocation::STATUS_QUERY;
     $this->_tablepfx = $wpdb->prefix.'ochregeo';
     
     $this->geocoder_cache_gc();
@@ -71,7 +71,7 @@ class OCHRELABS_WP_Geolocation
     $this->_longitude=$longitude;
     $this->_elevation=$elevation;
     $this->_accuracy=$accuracy;
-    $this->_status = self::STATUS_UPDATED;    
+    $this->_status = OCHRELABS_WP_Geolocation::STATUS_UPDATED;    
   }
   
   function get_coordinates()
@@ -87,17 +87,19 @@ class OCHRELABS_WP_Geolocation
   
   function handle_ajax()
   {
-    
+    if($this->debug){
+      error_log("Received ajax: ".print_r($_REQUEST,TRUE));
+    }
     if(isset($_POST['_ochregeo_result'])){
       switch($_POST['_ochregeo_result']){
     
         case('nosupport');
-          $this->_status = self::STATUS_NOTSUPPORTED;
+          $this->_status = OCHRELABS_WP_Geolocation::STATUS_NOTSUPPORTED;
           do_action('ochregeo_received_nosupport',$this);
         break;
         
         case('unknown');
-          $this->_status = self::STATUS_UNKNOWNPOS;
+          $this->_status = OCHRELABS_WP_Geolocation::STATUS_UNKNOWNPOS;
           do_action('ochregeo_received_unknownpos',$this);        
         break;
         
@@ -114,41 +116,60 @@ class OCHRELABS_WP_Geolocation
           $this->_postid = $_POST['_ochregeo_postid'];
           $this->set_coordinates($lat,$long,$elev,$acc);
           
+          if(get_option('ochregeo_rgeocode')=='Y'){
+            $rg=$this->geocode();
+          }
           do_action('ochregeo_received_location',$this);
 
           $opmode = get_option('ochregeo_opmode');          
-          if($opmode == $this::OPMODE_GLOBAL);
           
-          if($opmode == $this::OPMODE_GLOBAL){
-            $act = $this::POST_ACTION_EXECJS;
+          if($opmode == OCHRELABS_WP_Geolocation::OPMODE_GLOBAL){
+            $act = OCHRELABS_WP_Geolocation::POST_ACTION_EXECJS;
             $actp = get_option('ochregeo_globalactionjs');
-          } else if($opmode == $this::OPMODE_PERPOST){
+          } else if($opmode == OCHRELABS_WP_Geolocation::OPMODE_PERPOST){
           
             $act = get_post_meta($this->_postid,'ochregeo_action',true);
             $actp = get_post_meta($this->_postid,'ochregeo_actionp',true);
           
-            if($act==self::POST_ACTION_REDIRECT){
+            if($act==OCHRELABS_WP_Geolocation::POST_ACTION_REDIRECT){
               $actp=str_replace('#la#',$this->_latitude,$actp);
               $actp=str_replace('#lo#',$this->_longitude,$actp);
               $actp=str_replace('#ev#',$this->_elevation,$actp);
               $actp=str_replace('#ac#',$this->_accuracy,$actp);
+              
+              if($rg!=FALSE){
+                $actp=str_replace('#country#',$rg['country'],$actp);
+                $actp=str_replace('#countryc',$rg['countryc'],$actp);
+                $actp=str_replace('#state#',$rg['state'],$actp);
+                $actp=str_replace('#statec#',$rg['statec'],$actp);
+                $actp=str_replace('#city#',$rg['city'],$actp);
+                $actp=str_replace('#county#',$rg['county'],$actp);                
+              }
             }
-          }
+          }	// Per post handling
           
           if($this->debug){
             error_log('OchreGeo response for '.$this->_postid." is '$act' '$actp'");
           }
           
           $jsonr = "";
-          if($act!=FALSE && $act != self::POST_ACTION_DISABLED && $act != self::POST_ACTION_INTERNAL){
-            $jsonr = json_encode(array(
+          if($act!=FALSE && $act != OCHRELABS_WP_Geolocation::POST_ACTION_DISABLED && $act != OCHRELABS_WP_Geolocation::POST_ACTION_INTERNAL){
+            $res=array(
               'r'=>$act,
               'rr'=>$actp,
               'la'=>$this->_latitude,
               'lo'=>$this->_longitude,
               'ev'=>$this->_elevation,
-              'ac'=>$this->_accuracy              
-           ));
+              'ac'=>$this->_accuracy
+           );
+           if($rg!=FALSE){
+             $res['city'] = $rg['city'];
+             $res['country'] = $rg['country'];
+             $res['countryc'] = $rg['countryc'];
+             $res['state'] = $rg['state'];
+             $res['statec'] = $rg['statec'];
+           }
+           $jsonr = json_encode($res);
           }
           die( $jsonr);
       }
@@ -162,13 +183,15 @@ class OCHRELABS_WP_Geolocation
     $action = get_post_meta($post->ID,'ochregeo_action',true);
     $opmode = get_option('ochregeo_opmode');
     
-    if($opmode == $this::OPMODE_DISABLED) {
+    if($opmode == OCHRELABS_WP_Geolocation::OPMODE_DISABLED) {
       return;
-    } else if( $action == self::POST_ACTION_DISABLED){
+    } else if( $action == OCHRELABS_WP_Geolocation::POST_ACTION_DISABLED){
       return;
     }
     
-    wp_enqueue_script('ochregeo_get_coordinates', plugin_dir_url(__FILE__) . 'js/ochregeo.js', array( 'jquery' ));
+    $mypath=plugin_basename(__FILE__);
+    $mypath = "ochre-w3c-geolocation-services";
+    wp_enqueue_script('ochregeo_get_coordinates', plugins_url().'/'.$mypath . '/js/ochregeo.js', array( 'jquery' ));
     wp_localize_script( 'ochregeo_get_coordinates', 'OCHREGEO', array( 
      'postid'=> is_object($post) ? $post->ID : '-1',
      'ajaxurl' => admin_url( 'admin-ajax.php' ),
@@ -187,12 +210,20 @@ class OCHRELABS_WP_Geolocation
 
       update_option('ochregeo_opmode',$_POST['ochregeo_opmode']);
       update_option('ochregeo_globalactionjs',stripslashes_deep($_POST['ochregeo_globalactionjs']));
+      
+      if(isset($_POST['ochregeo_rgeocode'])){
+        update_option('ochregeo_rgeocode','Y');
+      } else {
+        update_option('ochregeo_rgeocode','N');
+      }
+      
       if(isset($_POST['ochregeo_useypf']))
         update_option('ochregeo_useypf','Y');
       else
         update_option('ochregeo_useypf','N');
         
       update_option('ochregeo_ypfappid',$_POST['ochregeo_ypfappid']);
+      
         
 //      echo "saved";
     }  
@@ -201,9 +232,10 @@ class OCHRELABS_WP_Geolocation
     $globaljs = get_option('ochregeo_globalactionjs');
     $ypf = get_option('ochregeo_useypf');
     $ypfappid = get_option('ochregeo_ypfappid');
+    $rgeocode = get_option('ochregeo_rgeocode');
 ?>
 <h1>Ochre's Geolocation Services plugin for Wordpress</h1>
-Version <?php echo $this::VERSION;?>
+Version <?php echo OCHRELABS_WP_Geolocation::VERSION;?>
 
 <div class="wrap">
 <div style="float: left; width: 80%;">
@@ -212,9 +244,9 @@ Version <?php echo $this::VERSION;?>
 <table>
 <tr><td>Operating Mode:</td><td>
 <select name="ochregeo_opmode">
-<option value="<?php echo $this::OPMODE_DISABLED;?>" <?php if($opmode==$this::OPMODE_DISABLED) echo "selected"; ?> >Disable completely</option>
-<option value="<?php echo $this::OPMODE_PERPOST;?>" <?php if($opmode==$this::OPMODE_PERPOST) echo "selected"; ?> >Per post
-<option value="<?php echo $this::OPMODE_GLOBAL;?>" <?php if($opmode==$this::OPMODE_GLOBAL) echo "selected"; ?> >Globally
+<option value="<?php echo OCHRELABS_WP_Geolocation::OPMODE_DISABLED;?>" <?php if($opmode==OCHRELABS_WP_Geolocation::OPMODE_DISABLED) echo "selected"; ?> >Disable completely</option>
+<option value="<?php echo OCHRELABS_WP_Geolocation::OPMODE_PERPOST;?>" <?php if($opmode==OCHRELABS_WP_Geolocation::OPMODE_PERPOST) echo "selected"; ?> >Per post
+<option value="<?php echo OCHRELABS_WP_Geolocation::OPMODE_GLOBAL;?>" <?php if($opmode==OCHRELABS_WP_Geolocation::OPMODE_GLOBAL) echo "selected"; ?> >Globally
 </select>
 </td></tr>
 <tr><td>Global action javascript:</td><td><textarea cols=80 rows=10 name="ochregeo_globalactionjs"><?php echo htmlentities($globaljs);?></textarea></td></tr>
@@ -222,6 +254,7 @@ Version <?php echo $this::VERSION;?>
 <h2>Geocoder Settings</h2>
 Use of the Yahoo! Placefinder API for Geocoding requires agreement with the <a href="http://developer.yahoo.com/terms" target="_blank">Yahoo! Developer Terms of Service</a>.
 <table>
+<tr><td>Return reverse Geo Coded results</td><td><input type="checkbox" name="ochregeo_rgeocode" value="Y" <?php if($rgeocode=="Y") echo "checked";?>></td></tr>
 <tr><td>Use Yahoo! Placefinder for Geocoding:</td><td><input type="checkbox" name="ochregeo_useypf" value="Y" <?php if($ypf == "Y") echo "checked";?>></td></tr>
 <tr><td>Yahoo! AppID</td><td><input type="text" name="ochregeo_ypfappid" value="<?php echo $ypfappid;?>"></td></tr>
 </table>
@@ -246,7 +279,7 @@ The operating mode determines how the Geolocation plugin behaves.  Your options 
 You can set Geolocation options on individual posts and pages by specifying a "Geolocation Action" and "Geolocation action parameter".  Refer to the Geolocation meta box in the page or post editor
 for details.
 <h1>Need help?</h1>
-This plugin is Free Software and is subject to the terms of the <a target="license" href="<?php echo plugin_dir_url(__FILE__);?>/license.txt">license</a>.  While we will endevour to respond to support and feature requests made through the <a target="_new" href="<?php echo $this::WP_EXTEND_URL;?>">Wordpress Plugin Information page</a>, more sophisticated needs are better 
+This plugin is Free Software and is subject to the terms of the <a target="license" href="<?php echo plugin_dir_url(__FILE__);?>/license.txt">license</a>.  While we will endevour to respond to support and feature requests made through the <a target="_new" href="<?php echo OCHRELABS_WP_Geolocation::WP_EXTEND_URL;?>">Wordpress Plugin Information page</a>, more sophisticated needs are better 
 suited for our commercial support.  <a target="_new" href="http://www.ochrelabs.com/contact/">For commercial assistance with this plugin, contact Ochre Development Labs</a> directly.
 </div>
 
@@ -260,7 +293,7 @@ Like this plugin? <br/>Buy us a coffee or two!
 </form>
 
 &middot; <a href="http://www.ochrelabs.com/wordpress-plugins/ochre-geolocation">Commercial Support</a><br/>
-&middot; <a href="<?php echo $this::WP_EXTEND_URL;?>">Wordpress Profile</a><br/>
+&middot; <a href="<?php echo OCHRELABS_WP_Geolocation::WP_EXTEND_URL;?>">Wordpress Profile</a><br/>
 <p/>
 <a href="http://www.ochrelabs.com">Ochre Development Labs</a>
 </div>
@@ -298,12 +331,12 @@ Like this plugin? <br/>Buy us a coffee or two!
 ?>
 <table>
 <tr><td>Geolocation action</td><td><select name="ochregeo_action">
-<option value="<?php echo $this::POST_ACTION_DEFAULT;?>" <?php if($action==$this::POST_ACTION_DEFAULT) echo "selected";?>> Global default</option>
-<option value="<?php echo $this::POST_ACTION_DISABLED;?>" <?php if($action==$this::POST_ACTION_DISABLED) echo "selected";?>> Disabled</option>
-<option value="<?php echo $this::POST_ACTION_INTERNAL;?>" <?php if($action==$this::POST_ACTION_INTERNAL) echo "selected";?>> No front end action</option>
-<option value="<?php echo $this::POST_ACTION_REDIRECT;?>" <?php if($action==$this::POST_ACTION_REDIRECT) echo "selected";?> >Redirect to a URL
-<option value="<?php echo $this::POST_ACTION_REFRESH;?>" <?php if($action==$this::POST_ACTION_REFRESH) echo "selected";?> >Refresh current page
-<option value="<?php echo $this::POST_ACTION_EXECJS;?>" <?php if($action==$this::POST_ACTION_EXECJS) echo "selected";?> >Execute Javascript
+<option value="<?php echo OCHRELABS_WP_Geolocation::POST_ACTION_DEFAULT;?>" <?php if($action==OCHRELABS_WP_Geolocation::POST_ACTION_DEFAULT) echo "selected";?>> Global default</option>
+<option value="<?php echo OCHRELABS_WP_Geolocation::POST_ACTION_DISABLED;?>" <?php if($action==OCHRELABS_WP_Geolocation::POST_ACTION_DISABLED) echo "selected";?>> Disabled</option>
+<option value="<?php echo OCHRELABS_WP_Geolocation::POST_ACTION_INTERNAL;?>" <?php if($action==OCHRELABS_WP_Geolocation::POST_ACTION_INTERNAL) echo "selected";?>> No front end action</option>
+<option value="<?php echo OCHRELABS_WP_Geolocation::POST_ACTION_REDIRECT;?>" <?php if($action==OCHRELABS_WP_Geolocation::POST_ACTION_REDIRECT) echo "selected";?> >Redirect to a URL
+<option value="<?php echo OCHRELABS_WP_Geolocation::POST_ACTION_REFRESH;?>" <?php if($action==OCHRELABS_WP_Geolocation::POST_ACTION_REFRESH) echo "selected";?> >Refresh current page
+<option value="<?php echo OCHRELABS_WP_Geolocation::POST_ACTION_EXECJS;?>" <?php if($action==OCHRELABS_WP_Geolocation::POST_ACTION_EXECJS) echo "selected";?> >Execute Javascript
 </select></td></tr>
 <tr><td>Geolocation action parameters</td><td><textarea cols=60 rows=5 id="ochregeo_actionp"  type="text" name="ochregeo_actionp"><?php echo $actionp;?></textarea></td></tr>
 </table>
@@ -311,15 +344,19 @@ Like this plugin? <br/>Buy us a coffee or two!
 <div id="ochregeo_help_t"><a onClick="jQuery('#ochregeo_help').show(); jQuery('#ochregeo_help_t').hide();">Show help</a></div>
 <div id="ochregeo_help" style="display: none">
 
-<ul>
+<ul style="padding: 20px !important">
 <li>Disabled : Do not attempt to retrieve the location of the visitor on this page</li>
 <li>Nothing : Performs a Geolocation query and fires do_action calls, but performs no front end action</li>
 <li>Redirect to a url: Take the visitor to another url.  Can include the following template variables:
-  <ul>
+  <ul style="padding: 20px !important">
     <li>#la# : Latitude</li>
     <li>#lo# : Longitude</li>
     <li>#ev# : Elevation</li>
     <li>#ac# : Accuracy</li>
+    <li>#country# or #countryc# : Country or Country Code</li>
+    <li>#state# or #statec# : State or State code</li>
+    <li>#city# : City</li>
+    <li>#county# : Country or local Region</li>
   </ul>
 </li>
 <li>Refresh current page: Refresh the current page</li>
@@ -345,7 +382,7 @@ Like this plugin? <br/>Buy us a coffee or two!
 
   function activate()
   {
-    update_option('ochregeo_opmode',$this::OPMODE_PERPOST);
+    update_option('ochregeo_opmode',OCHRELABS_WP_Geolocation::OPMODE_PERPOST);
     global $wpdb;
     
     if($wpdb->get_var("SHOW TABLES LIKE '".$this->_tablepfx."_geocoder_cache") != $this->_tablepfx."_geocoder_cache"){
@@ -367,7 +404,7 @@ Like this plugin? <br/>Buy us a coffee or two!
   {
     global $wpdb;  
 
-    update_option('ochregeo_opmode',$this::OPMODE_DISABLED);
+    update_option('ochregeo_opmode',OCHRELABS_WP_Geolocation::OPMODE_DISABLED);
     $wpdb->query("DROP TABLE ".$this->_tablepfx."_geocoder_cache");
   }  
     
@@ -411,7 +448,7 @@ Like this plugin? <br/>Buy us a coffee or two!
     
     $this->_latitude = "49.244977";
     $this->_longitude = "-123.110518";
-    $this->_status = $this::STATUS_UPDATED;
+    $this->_status = OCHRELABS_WP_Geolocation::STATUS_UPDATED;
     echo "Geocoder returned ";
     echo "<PRE>";    
     $res=$this->geocode();
@@ -427,7 +464,7 @@ Like this plugin? <br/>Buy us a coffee or two!
   function geocode()
   {
     
-    if($this->_status != $this::STATUS_UPDATED){
+    if($this->_status != OCHRELABS_WP_Geolocation::STATUS_UPDATED){
 	return(FALSE);
     }
     
@@ -448,7 +485,7 @@ Like this plugin? <br/>Buy us a coffee or two!
     $ctx=stream_context_create(array(
       'http'=>array(
         'method'=>'GET',
-        'user_agent'=>'OchreGeolocationforWordpress/'.$this::VERSION,
+        'user_agent'=>'OchreGeolocationforWordpress/'.OCHRELABS_WP_Geolocation::VERSION,
         'timeout'=>2
       )
     ));
@@ -484,8 +521,12 @@ add_action('save_post',array($ochre_geo,'save_post'));
 
 add_action('wp_enqueue_scripts', array($ochre_geo,'enqueue_scripts'));
 
+add_action('wp_ajax_ochregeo_get_coordinates', array($ochre_geo,'get_ajax_coordinates'));
+add_action('wp_ajax_ochregeos',array($ochre_geo,'handle_ajax'));
+
 add_action('wp_ajax_nopriv_ochregeo_get_coordinates', array($ochre_geo,'get_ajax_coordinates'));
 add_action('wp_ajax_nopriv_ochregeos',array($ochre_geo,'handle_ajax'));
+
 
 register_activation_hook(__FILE__,array($ochre_geo, 'activate'));
 register_deactivation_hook(__FILE__,array($ochre_geo, 'deactivate'));

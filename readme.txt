@@ -1,6 +1,6 @@
 === Ochre W3C Geolocation Services ===
 Contributors: ochrelabs
-Tags: geolocation, w3c, geo location
+Tags: geolocation, w3c, geo location, location, ochre, ochre labs, ochre development labs
 Requires at least: 3.0.0
 Tested up to: 3.3.1
 Stable tag: trunk
@@ -75,6 +75,14 @@ res.la; // latitude
 res.ll; // longitude
 res.ev; // elevation (not always available - do not rely on)
 res.ac  // accuracy (not always available - do not rely on)
+
+If reverse geo coding is enabled, the object may also contain:
+
+res.country  // country
+res.countryc // country code
+res.state    // state
+res.statec   // state code
+res.city     // city
 `
 
 == El Quickie API Reference ==
@@ -105,7 +113,7 @@ $ochre_geo->geocode();
 
 `
 
-== Geo Coder ==
+== Reverse Geo Coder ==
 We've thrown in Yahoo! place finder Geocoding support.  The geocoder()
 returns an array consisting of something like:
 
@@ -128,6 +136,15 @@ There are none yet.
 == Changelog ==
 = 0.02 =
 First release.  There may be bugs and other problems!  Try it out and let us know if you run into problems or have suggestions for improvement!
+
+= 0.03 =
+Miscellaneous fixes.
+
+= 0.04 =
+
+* Add option to reverse geo code results 
+* Add city, state, statec, country and countryc to redirect templates and returned javascript object
+* Fixes for PHP < 5.3 compatability
 
 == Upgrade Notice ==
 
