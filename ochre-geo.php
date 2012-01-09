@@ -5,7 +5,7 @@ Plugin URI: http://www.ochrelabs.com/wordpress-plugins/ochre-geolocation
 Description: Geolocation Services for Wordpress
 Author: Ochre Development Labs
 Author URI: http://www.ochrelabs.com
-Version: 0.02
+Version: 0.03
 */
 
 class OCHRELABS_WP_Geolocation
@@ -24,7 +24,7 @@ class OCHRELABS_WP_Geolocation
   private $_ypfcachettl = 600;		// Cache placefinder results for up to 10 minutes.
   private $_tablepfx;
   
-  const VERSION = 0.02;  
+  const VERSION = 0.03;  
     
   const WP_EXTEND_URL = 'http://wordpress.org/extend/plugins/ochre-w3c-geolocation-services/';
   const PLUGIN_URL = 'http://www.ochrelabs.com/wordpress-plugins/ochre-geolocation'; 
