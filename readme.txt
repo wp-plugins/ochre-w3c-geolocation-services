@@ -59,8 +59,23 @@ The following actions for do_action() are fired when a Geolocation update is rec
 == AJAX actions ==
 
 The following AJAX actions are implemented:
+
 * (nopriv) ochregeo_ochregeos : Transmits location information and executes an action based on a per-post/page or global setting.
 * (nopriv) ochregeo_get_coordinates : Retrieves last received location information. (we haven't tested this)
+
+== Executing custom javascript after a succesful Geolocation update ==
+
+Javascript executed on a per-page/post or global basis has access to a `res` object
+containing information from the Geolocation Service plugin.
+
+Properties of this object are:
+
+`
+res.la; // latitude
+res.ll; // longitude
+res.ev; // elevation (not always available - do not rely on)
+res.ac  // accuracy (not always available - do not rely on)
+`
 
 == El Quickie API Reference ==
 `
